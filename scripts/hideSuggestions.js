@@ -23,6 +23,17 @@ const STYLE_RULES = `
     display: none !important;
   }
 
+  /* Hide Shorts on subscriptions page */
+  ytd-browse[page-subtype="subscriptions"] ytd-reel-shelf-renderer,
+  ytd-browse[page-subtype="subscriptions"] ytd-rich-shelf-renderer[is-shorts],
+  ytd-browse[page-subtype="subscriptions"] ytd-rich-section-renderer[is-shorts],
+  ytd-browse[page-subtype="subscriptions"] [aria-label*="Shorts"],
+  ytd-browse[page-subtype="subscriptions"] [title*="Shorts"],
+  ytd-browse[page-subtype="subscriptions"] ytd-thumbnail-overlay-time-status-renderer[overlay-style="SHORTS"],
+  ytd-browse[page-subtype="subscriptions"] ytd-rich-item-renderer:has(ytd-thumbnail-overlay-time-status-renderer[overlay-style="SHORTS"]) {
+    display: none !important;
+  }
+
   /* Hide end screen suggestions and autoplay overlays */
   .ytp-autonav-endscreen-countdown-overlay,
   .ytp-autonav-endscreen-upnext,
