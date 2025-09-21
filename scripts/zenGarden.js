@@ -29,10 +29,15 @@ let gardenState = {
   time: 0,
   animationInterval: null,
   observer: null,
-  eventListeners: [],
+  gardenEventListeners: [],
+  globalEventListeners: [],
+  historyPatched: false,
+  navigationPollInterval: null,
   isInjecting: false,
   injectionDebounceTimer: null
 };
+
+let lastUrl = location.href;
 
 function getRandomPattern() {
   const totalWeight = PATTERNS.reduce((sum, p) => sum + p.weight, 0);
@@ -256,11 +261,11 @@ function cleanupGarden() {
     gardenState.observer = null;
   }
 
-  // Remove event listeners
-  for (const { element, event, handler } of gardenState.eventListeners) {
+  // Remove listeners attached to the rendered garden UI
+  for (const { element, event, handler } of gardenState.gardenEventListeners) {
     element.removeEventListener(event, handler);
   }
-  gardenState.eventListeners = [];
+  gardenState.gardenEventListeners = [];
 
   // Remove garden element
   const garden = document.getElementById(ZEN_GARDEN_ID);
@@ -270,6 +275,74 @@ function cleanupGarden() {
 
   // Reset injection flag
   gardenState.isInjecting = false;
+}
+
+function cleanupGlobalListeners() {
+  for (const { element, event, handler } of gardenState.globalEventListeners) {
+    element.removeEventListener(event, handler);
+  }
+  gardenState.globalEventListeners = [];
+
+  if (gardenState.navigationPollInterval) {
+    clearInterval(gardenState.navigationPollInterval);
+    gardenState.navigationPollInterval = null;
+  }
+}
+
+function handleNavigationChange(reason, { force = false, delay = 150 } = {}) {
+  const url = location.href;
+  if (!force && url === lastUrl) {
+    return;
+  }
+
+  const previousUrl = lastUrl;
+  lastUrl = url;
+  console.log('[ZenGarden] URL change detected via', reason, 'from', previousUrl, 'to', url);
+
+  if (window.location.pathname === '/') {
+    console.log('[ZenGarden] On homepage via', reason, 'scheduling debounced injection (' + delay + 'ms)');
+    debouncedInjectZenGarden(delay);
+  } else {
+    cleanupGarden();
+  }
+}
+
+function setupHistoryListeners() {
+  if (gardenState.historyPatched) {
+    return;
+  }
+
+  gardenState.historyPatched = true;
+
+  const wrapHistoryMethod = (method) => {
+    const original = history[method];
+    if (typeof original === 'function') {
+      history[method] = function wrappedHistoryMethod(...args) {
+        const result = original.apply(this, args);
+        handleNavigationChange('history.' + method, { force: true });
+        return result;
+      };
+    }
+  };
+
+  wrapHistoryMethod('pushState');
+  wrapHistoryMethod('replaceState');
+
+  const popstateHandler = () => handleNavigationChange('popstate', { force: true });
+  window.addEventListener('popstate', popstateHandler);
+  gardenState.globalEventListeners.push({ element: window, event: 'popstate', handler: popstateHandler });
+
+  if (window.navigation && typeof window.navigation.addEventListener === 'function') {
+    const navigationHandler = () => handleNavigationChange('navigation-api', { force: true });
+    window.navigation.addEventListener('navigate', navigationHandler);
+    gardenState.globalEventListeners.push({ element: window.navigation, event: 'navigate', handler: navigationHandler });
+  }
+
+  if (!gardenState.navigationPollInterval) {
+    gardenState.navigationPollInterval = setInterval(() => {
+      handleNavigationChange('poll', { delay: 180 });
+    }, 250);
+  }
 }
 
 function injectZenGarden(retryCount = 0) {
@@ -383,7 +456,7 @@ function injectZenGarden(retryCount = 0) {
       display.textContent = renderGarden();
     };
     btn.addEventListener('click', handler);
-    gardenState.eventListeners.push({ element: btn, event: 'click', handler });
+    gardenState.gardenEventListeners.push({ element: btn, event: 'click', handler });
   });
 
   const rippleBtn = garden.querySelector('.zen-ripple-btn');
@@ -395,7 +468,7 @@ function injectZenGarden(retryCount = 0) {
     createRipple(x, y, 15);
   };
   rippleBtn.addEventListener('click', rippleHandler);
-  gardenState.eventListeners.push({ element: rippleBtn, event: 'click', handler: rippleHandler });
+  gardenState.gardenEventListeners.push({ element: rippleBtn, event: 'click', handler: rippleHandler });
 
   const resetBtn = garden.querySelector('.zen-reset-btn');
   const resetHandler = () => {
@@ -404,7 +477,7 @@ function injectZenGarden(retryCount = 0) {
     quote.textContent = getRandomQuote();
   };
   resetBtn.addEventListener('click', resetHandler);
-  gardenState.eventListeners.push({ element: resetBtn, event: 'click', handler: resetHandler });
+  gardenState.gardenEventListeners.push({ element: resetBtn, event: 'click', handler: resetHandler });
 
   // Start animation loop with proper cleanup
   gardenState.animationInterval = setInterval(() => {
@@ -433,27 +506,13 @@ console.log('[ZenGarden] Initial load, attempting injection');
 injectZenGarden();
 
 // Watch for YouTube navigation changes (SPA navigation)
-let lastUrl = location.href;
 gardenState.observer = new MutationObserver(() => {
-  const url = location.href;
-  if (url !== lastUrl) {
-    console.log('[ZenGarden] URL changed from', lastUrl, 'to', url);
-    lastUrl = url;
-    // URL changed, check if we're on homepage
-    if (window.location.pathname === '/') {
-      console.log('[ZenGarden] URL changed to homepage, injecting in 100ms');
-      setTimeout(() => {
-        injectZenGarden();
-      }, 100);
-    } else {
-      cleanupGarden();
-    }
-  }
+  handleNavigationChange('mutation');
 
   // Also check for homepage content appearing
   if ((window.location.pathname === '/' || document.querySelector('ytd-browse[page-subtype="home"]')) && !document.getElementById(ZEN_GARDEN_ID)) {
     console.log('[ZenGarden] Homepage content detected via MutationObserver');
-    injectZenGarden();
+    debouncedInjectZenGarden(120);
   }
 });
 
@@ -464,49 +523,36 @@ gardenState.observer.observe(observeTarget, {
   subtree: true
 });
 
+setupHistoryListeners();
+
 // Also listen for YouTube's custom navigation events
 const ytNavigateHandler = () => {
   console.log('[ZenGarden] yt-navigate-finish fired, path:', window.location.pathname);
-  if (window.location.pathname === '/') {
-    console.log('[ZenGarden] On homepage via yt-navigate-finish, injecting in 100ms');
-    setTimeout(() => {
-      injectZenGarden();
-    }, 100);
-  } else {
-    cleanupGarden();
-  }
+  handleNavigationChange('yt-navigate-finish', { force: true, delay: 100 });
 };
 window.addEventListener('yt-navigate-finish', ytNavigateHandler);
-gardenState.eventListeners.push({ element: window, event: 'yt-navigate-finish', handler: ytNavigateHandler });
+gardenState.globalEventListeners.push({ element: window, event: 'yt-navigate-finish', handler: ytNavigateHandler });
 
 // Listen for YouTube's navigation start event (triggers on logo click)
 const ytNavigateStartHandler = () => {
   console.log('[ZenGarden] yt-navigate-start fired, path:', window.location.pathname);
-  // Clean up if navigating away from home
-  if (window.location.pathname !== '/') {
-    cleanupGarden();
-  } else {
-    console.log('[ZenGarden] On homepage via yt-navigate-start, scheduling debounced injection (300ms)');
-    // Check if navigating to homepage - use debounced injection
-    debouncedInjectZenGarden(300);
-  }
+  handleNavigationChange('yt-navigate-start', { force: true, delay: 300 });
 };
 window.addEventListener('yt-navigate-start', ytNavigateStartHandler);
-gardenState.eventListeners.push({ element: window, event: 'yt-navigate-start', handler: ytNavigateStartHandler });
+gardenState.globalEventListeners.push({ element: window, event: 'yt-navigate-start', handler: ytNavigateStartHandler });
 
 // Listen for page data updates (more reliable for logo clicks from video pages)
 const ytPageDataHandler = () => {
   console.log('[ZenGarden] yt-page-data-updated fired, path:', window.location.pathname);
-  if (window.location.pathname === '/' && !document.getElementById(ZEN_GARDEN_ID)) {
-    console.log('[ZenGarden] On homepage without garden via yt-page-data-updated, scheduling debounced injection (400ms)');
-    // Longer delay for navigating from video pages - use debounced injection
-    debouncedInjectZenGarden(400);
-  }
+  handleNavigationChange('yt-page-data-updated', { force: true, delay: 400 });
 };
 window.addEventListener('yt-page-data-updated', ytPageDataHandler);
-gardenState.eventListeners.push({ element: window, event: 'yt-page-data-updated', handler: ytPageDataHandler });
+gardenState.globalEventListeners.push({ element: window, event: 'yt-page-data-updated', handler: ytPageDataHandler });
 
 // Clean up on page unload
-const beforeUnloadHandler = () => cleanupGarden();
+const beforeUnloadHandler = () => {
+  cleanupGarden();
+  cleanupGlobalListeners();
+};
 window.addEventListener('beforeunload', beforeUnloadHandler);
-gardenState.eventListeners.push({ element: window, event: 'beforeunload', handler: beforeUnloadHandler });
+gardenState.globalEventListeners.push({ element: window, event: 'beforeunload', handler: beforeUnloadHandler });
