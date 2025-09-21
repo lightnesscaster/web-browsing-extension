@@ -25,12 +25,13 @@ const STYLE_RULES = `
 
   /* Hide Shorts on subscriptions page */
   ytd-browse[page-subtype="subscriptions"] ytd-reel-shelf-renderer,
+  ytd-browse[page-subtype="subscriptions"] ytd-reel-item-renderer,
   ytd-browse[page-subtype="subscriptions"] ytd-rich-shelf-renderer[is-shorts],
   ytd-browse[page-subtype="subscriptions"] ytd-rich-section-renderer[is-shorts],
-  ytd-browse[page-subtype="subscriptions"] [aria-label*="Shorts"],
-  ytd-browse[page-subtype="subscriptions"] [title*="Shorts"],
-  ytd-browse[page-subtype="subscriptions"] ytd-thumbnail-overlay-time-status-renderer[overlay-style="SHORTS"],
-  ytd-browse[page-subtype="subscriptions"] ytd-rich-item-renderer:has(ytd-thumbnail-overlay-time-status-renderer[overlay-style="SHORTS"]) {
+  ytd-browse[page-subtype="subscriptions"] ytd-video-preview[is-shorts],
+  ytd-browse[page-subtype="subscriptions"] [aria-label="Shorts"],
+  ytd-browse[page-subtype="subscriptions"] [aria-label^="Shorts shelf"],
+  ytd-browse[page-subtype="subscriptions"] ytd-thumbnail[overlay-style="SHORTS"] {
     display: none !important;
   }
 
