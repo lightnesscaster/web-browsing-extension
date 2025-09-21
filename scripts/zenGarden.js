@@ -271,23 +271,29 @@ function cleanupGarden() {
 }
 
 function injectZenGarden(retryCount = 0) {
+  console.log('[ZenGarden] Attempting injection, retry:', retryCount, 'URL:', window.location.pathname);
+
   // Prevent concurrent injections
   if (gardenState.isInjecting) {
+    console.log('[ZenGarden] Already injecting, skipping');
     return;
   }
 
   // Check if we're on YouTube homepage
   if (window.location.pathname !== '/') {
+    console.log('[ZenGarden] Not on homepage, skipping');
     return;
   }
 
   // Check if garden already exists
   if (document.getElementById(ZEN_GARDEN_ID)) {
+    console.log('[ZenGarden] Garden already exists');
     return;
   }
 
   // Ensure clean state first
   if (gardenState.animationInterval || (gardenState.observer && gardenState.observer !== document.body)) {
+    console.log('[ZenGarden] Cleaning up old state');
     cleanupGarden();
   }
 
@@ -295,25 +301,41 @@ function injectZenGarden(retryCount = 0) {
 
   // Wait for YouTube to load - try multiple selectors
   let targetElement = document.querySelector('ytd-browse[page-subtype="home"] #primary');
+  console.log('[ZenGarden] Try 1 - ytd-browse[page-subtype="home"] #primary:', !!targetElement);
 
   // Fallback: if page-subtype="home" not yet set, try YouTube-specific browse page
   if (!targetElement && window.location.pathname === '/') {
-    targetElement = document.querySelector('ytd-browse #primary') ||
-                    document.querySelector('ytd-app ytd-browse #primary');
+    targetElement = document.querySelector('ytd-browse #primary');
+    console.log('[ZenGarden] Try 2 - ytd-browse #primary:', !!targetElement);
+
+    if (!targetElement) {
+      targetElement = document.querySelector('ytd-app ytd-browse #primary');
+      console.log('[ZenGarden] Try 3 - ytd-app ytd-browse #primary:', !!targetElement);
+    }
+
+    if (!targetElement) {
+      targetElement = document.querySelector('#primary');
+      console.log('[ZenGarden] Try 4 - #primary:', !!targetElement);
+    }
   }
 
   if (!targetElement) {
+    console.log('[ZenGarden] No target element found, will retry');
     // Retry up to 5 times (1.5 seconds total) with pathway validation
     if (retryCount < 5 && window.location.pathname === '/') {
+      console.log('[ZenGarden] Scheduling retry', retryCount + 1, 'in 300ms');
       setTimeout(() => {
         gardenState.isInjecting = false;
         injectZenGarden(retryCount + 1);
       }, 300);
     } else {
+      console.log('[ZenGarden] Max retries reached or path changed');
       gardenState.isInjecting = false;
     }
     return;
   }
+
+  console.log('[ZenGarden] Target element found, creating garden');
 
   // Create and insert the garden
   const garden = createZenGardenElement();
@@ -432,10 +454,12 @@ gardenState.eventListeners.push({ element: window, event: 'yt-navigate-finish', 
 
 // Listen for YouTube's navigation start event (triggers on logo click)
 const ytNavigateStartHandler = () => {
+  console.log('[ZenGarden] yt-navigate-start fired, path:', window.location.pathname);
   // Clean up if navigating away from home
   if (window.location.pathname !== '/') {
     cleanupGarden();
   } else {
+    console.log('[ZenGarden] Navigating to homepage, scheduling debounced injection');
     // Check if navigating to homepage - use debounced injection
     debouncedInjectZenGarden(300);
   }
@@ -445,7 +469,9 @@ gardenState.eventListeners.push({ element: window, event: 'yt-navigate-start', h
 
 // Listen for page data updates (more reliable for logo clicks from video pages)
 const ytPageDataHandler = () => {
+  console.log('[ZenGarden] yt-page-data-updated fired, path:', window.location.pathname);
   if (window.location.pathname === '/' && !document.getElementById(ZEN_GARDEN_ID)) {
+    console.log('[ZenGarden] On homepage without garden, scheduling debounced injection');
     // Longer delay for navigating from video pages - use debounced injection
     debouncedInjectZenGarden(400);
   }
