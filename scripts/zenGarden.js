@@ -247,9 +247,9 @@ function cleanupGarden() {
   }
 }
 
-function injectZenGarden() {
+function injectZenGarden(retryCount = 0) {
   // Check if we're on YouTube homepage
-  if (window.location.pathname !== '/' && !document.querySelector('ytd-browse[page-subtype="home"]')) {
+  if (window.location.pathname !== '/') {
     return;
   }
 
@@ -258,10 +258,20 @@ function injectZenGarden() {
     return;
   }
 
-  // Wait for YouTube to load
-  const targetElement = document.querySelector('ytd-browse[page-subtype="home"] #primary');
+  // Wait for YouTube to load - try multiple selectors
+  let targetElement = document.querySelector('ytd-browse[page-subtype="home"] #primary');
+
+  // Fallback: if page-subtype="home" not yet set, try generic browse page
+  if (!targetElement && window.location.pathname === '/') {
+    targetElement = document.querySelector('ytd-browse #primary') ||
+                    document.querySelector('#primary');
+  }
+
   if (!targetElement) {
-    setTimeout(injectZenGarden, 500);
+    // Retry up to 10 times (5 seconds total)
+    if (retryCount < 10) {
+      setTimeout(() => injectZenGarden(retryCount + 1), 500);
+    }
     return;
   }
 
@@ -379,22 +389,28 @@ gardenState.eventListeners.push({ element: window, event: 'yt-navigate-finish', 
 
 // Listen for YouTube's navigation start event (triggers on logo click)
 const ytNavigateStartHandler = () => {
-  // Check if navigating to homepage
-  setTimeout(() => {
-    if (window.location.pathname === '/') {
-      injectZenGarden();
-    }
-  }, 150);
+  // Clean up if navigating away from home
+  if (window.location.pathname !== '/') {
+    cleanupGarden();
+  } else {
+    // Check if navigating to homepage
+    setTimeout(() => {
+      if (window.location.pathname === '/') {
+        injectZenGarden();
+      }
+    }, 300);
+  }
 };
 window.addEventListener('yt-navigate-start', ytNavigateStartHandler);
 gardenState.eventListeners.push({ element: window, event: 'yt-navigate-start', handler: ytNavigateStartHandler });
 
-// Listen for page data updates (more reliable for logo clicks)
+// Listen for page data updates (more reliable for logo clicks from video pages)
 const ytPageDataHandler = () => {
   if (window.location.pathname === '/' && !document.getElementById(ZEN_GARDEN_ID)) {
+    // Longer delay for navigating from video pages
     setTimeout(() => {
       injectZenGarden();
-    }, 200);
+    }, 400);
   }
 };
 window.addEventListener('yt-page-data-updated', ytPageDataHandler);
