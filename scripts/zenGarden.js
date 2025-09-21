@@ -335,19 +335,44 @@ function injectZenGarden() {
 // Start the zen garden
 injectZenGarden();
 
-// Watch for navigation changes
+// Watch for YouTube navigation changes (SPA navigation)
+let lastUrl = location.href;
 gardenState.observer = new MutationObserver(() => {
-  if (window.location.pathname === '/' || document.querySelector('ytd-browse[page-subtype="home"]')) {
+  const url = location.href;
+  if (url !== lastUrl) {
+    lastUrl = url;
+    // URL changed, check if we're on homepage
+    if (window.location.pathname === '/') {
+      setTimeout(() => {
+        injectZenGarden();
+      }, 100);
+    } else {
+      cleanupGarden();
+    }
+  }
+
+  // Also check for homepage content appearing
+  if ((window.location.pathname === '/' || document.querySelector('ytd-browse[page-subtype="home"]')) && !document.getElementById(ZEN_GARDEN_ID)) {
     injectZenGarden();
-  } else {
-    // Clean up garden when navigating away from homepage
-    cleanupGarden();
   }
 });
 
-gardenState.observer.observe(document.body, {
+// Observe specific YouTube app container for better SPA navigation detection
+const observeTarget = document.querySelector('ytd-app') || document.body;
+gardenState.observer.observe(observeTarget, {
   childList: true,
   subtree: true
+});
+
+// Also listen for YouTube's custom navigation events
+window.addEventListener('yt-navigate-finish', () => {
+  if (window.location.pathname === '/') {
+    setTimeout(() => {
+      injectZenGarden();
+    }, 100);
+  } else {
+    cleanupGarden();
+  }
 });
 
 // Clean up on page unload
