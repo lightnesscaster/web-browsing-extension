@@ -377,6 +377,29 @@ const ytNavigateHandler = () => {
 window.addEventListener('yt-navigate-finish', ytNavigateHandler);
 gardenState.eventListeners.push({ element: window, event: 'yt-navigate-finish', handler: ytNavigateHandler });
 
+// Listen for YouTube's navigation start event (triggers on logo click)
+const ytNavigateStartHandler = () => {
+  // Check if navigating to homepage
+  setTimeout(() => {
+    if (window.location.pathname === '/') {
+      injectZenGarden();
+    }
+  }, 150);
+};
+window.addEventListener('yt-navigate-start', ytNavigateStartHandler);
+gardenState.eventListeners.push({ element: window, event: 'yt-navigate-start', handler: ytNavigateStartHandler });
+
+// Listen for page data updates (more reliable for logo clicks)
+const ytPageDataHandler = () => {
+  if (window.location.pathname === '/' && !document.getElementById(ZEN_GARDEN_ID)) {
+    setTimeout(() => {
+      injectZenGarden();
+    }, 200);
+  }
+};
+window.addEventListener('yt-page-data-updated', ytPageDataHandler);
+gardenState.eventListeners.push({ element: window, event: 'yt-page-data-updated', handler: ytPageDataHandler });
+
 // Clean up on page unload
 const beforeUnloadHandler = () => cleanupGarden();
 window.addEventListener('beforeunload', beforeUnloadHandler);
