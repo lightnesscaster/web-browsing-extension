@@ -1,0 +1,22 @@
+# Build artifacts
+web-ext-artifacts/
+*.xpi
+*.zip
+
+# Node modules (if you add any in the future)
+node_modules/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary files
+*.tmp
+*.bak
+*~

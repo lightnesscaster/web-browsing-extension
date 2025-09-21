@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "Zen YouTube Cleaner",
+  "version": "0.1.0",
+  "description": "Hide distracting video suggestions and end screens on YouTube.",
+  "action": {
+    "default_title": "Zen YouTube Cleaner"
+  },
+  "host_permissions": [
+    "https://www.youtube.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.youtube.com/*"
+      ],
+      "js": ["scripts/hideSuggestions.js", "scripts/zenGarden.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "permissions": [],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "zen-youtube-cleaner@example.com"
+    }
+  }
+}
