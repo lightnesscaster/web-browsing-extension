@@ -365,7 +365,7 @@ gardenState.observer.observe(observeTarget, {
 });
 
 // Also listen for YouTube's custom navigation events
-window.addEventListener('yt-navigate-finish', () => {
+const ytNavigateHandler = () => {
   if (window.location.pathname === '/') {
     setTimeout(() => {
       injectZenGarden();
@@ -373,7 +373,11 @@ window.addEventListener('yt-navigate-finish', () => {
   } else {
     cleanupGarden();
   }
-});
+};
+window.addEventListener('yt-navigate-finish', ytNavigateHandler);
+gardenState.eventListeners.push({ element: window, event: 'yt-navigate-finish', handler: ytNavigateHandler });
 
 // Clean up on page unload
-window.addEventListener('beforeunload', cleanupGarden);
+const beforeUnloadHandler = () => cleanupGarden();
+window.addEventListener('beforeunload', beforeUnloadHandler);
+gardenState.eventListeners.push({ element: window, event: 'beforeunload', handler: beforeUnloadHandler });
