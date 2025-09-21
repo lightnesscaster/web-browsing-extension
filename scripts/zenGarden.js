@@ -29,7 +29,9 @@ let gardenState = {
   time: 0,
   animationInterval: null,
   observer: null,
-  eventListeners: []
+  eventListeners: [],
+  isInjecting: false,
+  injectionDebounceTimer: null
 };
 
 function getRandomPattern() {
@@ -221,11 +223,29 @@ function getRandomQuote() {
   return ZEN_QUOTES[Math.floor(Math.random() * ZEN_QUOTES.length)];
 }
 
+// Debounced injection helper
+function debouncedInjectZenGarden(delay = 100) {
+  if (gardenState.injectionDebounceTimer) {
+    clearTimeout(gardenState.injectionDebounceTimer);
+  }
+
+  gardenState.injectionDebounceTimer = setTimeout(() => {
+    injectZenGarden();
+    gardenState.injectionDebounceTimer = null;
+  }, delay);
+}
+
 function cleanupGarden() {
   // Clear animation interval
   if (gardenState.animationInterval) {
     clearInterval(gardenState.animationInterval);
     gardenState.animationInterval = null;
+  }
+
+  // Clear debounce timer
+  if (gardenState.injectionDebounceTimer) {
+    clearTimeout(gardenState.injectionDebounceTimer);
+    gardenState.injectionDebounceTimer = null;
   }
 
   // Disconnect observer
@@ -245,9 +265,17 @@ function cleanupGarden() {
   if (garden) {
     garden.remove();
   }
+
+  // Reset injection flag
+  gardenState.isInjecting = false;
 }
 
 function injectZenGarden(retryCount = 0) {
+  // Prevent concurrent injections
+  if (gardenState.isInjecting) {
+    return;
+  }
+
   // Check if we're on YouTube homepage
   if (window.location.pathname !== '/') {
     return;
@@ -258,19 +286,31 @@ function injectZenGarden(retryCount = 0) {
     return;
   }
 
+  // Ensure clean state first
+  if (gardenState.animationInterval || (gardenState.observer && gardenState.observer !== document.body)) {
+    cleanupGarden();
+  }
+
+  gardenState.isInjecting = true;
+
   // Wait for YouTube to load - try multiple selectors
   let targetElement = document.querySelector('ytd-browse[page-subtype="home"] #primary');
 
-  // Fallback: if page-subtype="home" not yet set, try generic browse page
+  // Fallback: if page-subtype="home" not yet set, try YouTube-specific browse page
   if (!targetElement && window.location.pathname === '/') {
     targetElement = document.querySelector('ytd-browse #primary') ||
-                    document.querySelector('#primary');
+                    document.querySelector('ytd-app ytd-browse #primary');
   }
 
   if (!targetElement) {
-    // Retry up to 10 times (5 seconds total)
-    if (retryCount < 10) {
-      setTimeout(() => injectZenGarden(retryCount + 1), 500);
+    // Retry up to 5 times (1.5 seconds total) with pathway validation
+    if (retryCount < 5 && window.location.pathname === '/') {
+      setTimeout(() => {
+        gardenState.isInjecting = false;
+        injectZenGarden(retryCount + 1);
+      }, 300);
+    } else {
+      gardenState.isInjecting = false;
     }
     return;
   }
@@ -340,6 +380,9 @@ function injectZenGarden(retryCount = 0) {
       }, 500);
     }
   }, 1000);
+
+  // Mark injection as complete
+  gardenState.isInjecting = false;
 }
 
 // Start the zen garden
@@ -393,12 +436,8 @@ const ytNavigateStartHandler = () => {
   if (window.location.pathname !== '/') {
     cleanupGarden();
   } else {
-    // Check if navigating to homepage
-    setTimeout(() => {
-      if (window.location.pathname === '/') {
-        injectZenGarden();
-      }
-    }, 300);
+    // Check if navigating to homepage - use debounced injection
+    debouncedInjectZenGarden(300);
   }
 };
 window.addEventListener('yt-navigate-start', ytNavigateStartHandler);
@@ -407,10 +446,8 @@ gardenState.eventListeners.push({ element: window, event: 'yt-navigate-start', h
 // Listen for page data updates (more reliable for logo clicks from video pages)
 const ytPageDataHandler = () => {
   if (window.location.pathname === '/' && !document.getElementById(ZEN_GARDEN_ID)) {
-    // Longer delay for navigating from video pages
-    setTimeout(() => {
-      injectZenGarden();
-    }, 400);
+    // Longer delay for navigating from video pages - use debounced injection
+    debouncedInjectZenGarden(400);
   }
 };
 window.addEventListener('yt-page-data-updated', ytPageDataHandler);
